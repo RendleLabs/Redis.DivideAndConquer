@@ -5,7 +5,7 @@ namespace RendleLabs.Redis.DivideAndConquer
 {
     public interface IDivideAndConquerPublisher
     {
-        Task<long> PublishAsync(RedisKey key, RedisValue value);
-        Task<long> PublishAsync(RedisKey key, RedisValue[] values);
+        Task<long> PublishAsync(RedisValue metadata, RedisValue value);
+        Task<long> PublishAsync(RedisValue metadata, RedisValue[] values);
     }
 }

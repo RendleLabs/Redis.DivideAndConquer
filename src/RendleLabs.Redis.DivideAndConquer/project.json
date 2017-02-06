@@ -1,8 +1,22 @@
 {
-  "version": "1.0.0-*",
+  "version": "1.0.0-alpha-2",
+  "title": "RendleLabs.Redis.DivideAndConquer",
+  "packOptions": {
+    "licenseUrl": "https://github.com/RendleLabs/Redis.DivideAndConquer/blob/master/LICENSE.txt",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/RendleLabs/Redis.DivideAndConquer"
+    },
+    "owners": [
+      "Mark Rendle"
+    ],
+    "summary": "A general-purpose Divide-and-Conquer library built on StackExchange.Redis"
+  },
+  "copyright": "2017 RendleLabs Ltd",
 
   "dependencies": {
     "NETStandard.Library": "1.5.0",
+    "Google.Protobuf": "3.2.0",
     "StackExchange.Redis": "1.2.0"
   },
 

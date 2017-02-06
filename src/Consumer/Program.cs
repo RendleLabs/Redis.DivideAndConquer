@@ -1,5 +1,6 @@
 using System;
 using System.Threading.Tasks;
+using Newtonsoft.Json;
 using RendleLabs.Redis.DivideAndConquer;
 using StackExchange.Redis;
 
@@ -16,22 +17,19 @@ namespace Consumer
 
         private static IDivideAndConquerSubscriber Consume()
         {
+            var completedTask = Task.FromResult<object>(null);
             var redis = ConnectionMultiplexer.Connect("127.0.0.1:6379");
             var subscriber = redis.GetDivideAndConquerSubscriber("test");
-            subscriber.Subscribe("work", async (key, value) => {
-                if (!string.IsNullOrWhiteSpace(value))
-                {
-                    Console.WriteLine();
-                    Console.WriteLine($"Got: {value}");
-                    await Task.Delay(10);
-                }
-                else
-                {
-                    Console.Write(".");
-                    await Task.Delay(100);
-                }
+            subscriber.Subscribe((metadataJson, value) => {
+                var metadata = JsonConvert.DeserializeObject<Metadata>(metadataJson);
+                Console.WriteLine($"Got: {metadata.JobId} - {value}");
+                return completedTask;
             });
             return subscriber;
         }
+    }
+    class Metadata
+    {
+        public string JobId { get; set; }
     }
 }

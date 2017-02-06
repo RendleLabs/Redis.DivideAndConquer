@@ -8,8 +8,9 @@ namespace RendleLabs.Redis.DivideAndConquer
 {
     public class DivideAndConquerSubscriber : IDivideAndConquerSubscriber
     {
-        private readonly ConcurrentDictionary<RedisKey, IList<Func<RedisKey, RedisValue, Task>>> _subscriptions = new ConcurrentDictionary<RedisKey, IList<Func<RedisKey, RedisValue, Task>>>();
+        private readonly List<Func<RedisValue, RedisValue, Task>> _subscriptions = new List<Func<RedisValue, RedisValue, Task>>();
         private readonly ConcurrentDictionary<RedisKey, bool> _running = new ConcurrentDictionary<RedisKey, bool>();
+        private readonly object _subscriptionsSync = new object();
         private readonly ConnectionMultiplexer _redis;
         private readonly RedisChannel _pubSubChannel;
         private readonly object _sync = new object();
@@ -21,28 +22,28 @@ namespace RendleLabs.Redis.DivideAndConquer
             _pubSubChannel = pubSubChannel;
         }
 
-        public void Subscribe(RedisKey key, Func<RedisKey, RedisValue, Task> action)
+        public void Subscribe(Func<RedisValue, RedisValue, Task> action)
         {
             if (_subscriber == null) Open();
-            var list = _subscriptions.GetOrAdd(key, _ => new List<Func<RedisKey, RedisValue, Task>>());
-            list.Add(action);
+            lock (_subscriptionsSync)
+            {
+                _subscriptions.Add(action);
+            }
         }
 
-        public void Unsubscribe(RedisKey key, Func<RedisKey, RedisValue, Task> action = null)
+        public void Unsubscribe(Func<RedisValue, RedisValue, Task> action = null)
         {
-            if (_subscriber == null) return;
+            if (_subscriber == null || _subscriptions.Count == 0) return;
 
-            IList<Func<RedisKey, RedisValue, Task>> subscriptions;
-            if (action == null)
+            lock (_subscriptionsSync)
             {
-                _subscriptions.TryRemove(key, out subscriptions);
-            }
-            else if (_subscriptions.TryGetValue(key, out subscriptions))
-            {
-                subscriptions.Remove(action);
-                if (subscriptions.Count == 0)
+                if (action == null)
                 {
-                    _subscriptions.TryRemove(key, out subscriptions);
+                    _subscriptions.Clear();
+                }
+                else
+                {
+                    _subscriptions.Remove(action);
                 }
             }
 
@@ -80,50 +81,46 @@ namespace RendleLabs.Redis.DivideAndConquer
 
         private void PubSubMessageHandler(RedisChannel channel, RedisValue value)
         {
-            if (value.IsNullOrEmpty) return;
-            var key = (string)value;
+            if (value.IsNullOrEmpty || _subscriptions.Count == 0) return;
+            var msg = PubSubMessage.Parser.ParseFrom(value);
 
-            IList<Func<RedisKey, RedisValue, Task>> subscriptions;
-            if (_subscriptions.TryGetValue(key, out subscriptions))
+            if (!_running.TryAdd(msg.ListKey.ToStringUtf8(), true)) return;
+
+            try
             {
-                if (!_running.TryAdd(key, true))
-                {
-                    return;
-                }
-
-                try
-                {
-                    ProcessQueue(key, subscriptions);
-                }
-                catch { }
+                ProcessQueue(msg);
             }
+            catch {} // Not awaiting this task
         }
 
-        private async void ProcessQueue(RedisKey key, IList<Func<RedisKey, RedisValue, Task>> actions)
+        private async void ProcessQueue(PubSubMessage message)
         {
+            var listKey = message.ListKey.ToByteArray();
+            var metadata = message.Metadata.ToByteArray();
+            var actions = _subscriptions.ToArray();
             try
             {
                 RedisValue value;
-                while ((value = await _db.ListLeftPopAsync(key)).HasValue)
+                while ((value = await _db.ListLeftPopAsync(listKey)).HasValue)
                 {
-                    for (int i = 0; i < actions.Count; i++)
+                    for (int i = 0; i < actions.Length; i++)
                     {
-                        FireAndForget(actions[i], key, value);
+                        FireAndForget(actions[i], metadata, value);
                     }
                 }
             }
             finally
             {
                 bool _;
-                _running.TryRemove(key, out _);
+                _running.TryRemove(message.ListKey.ToStringUtf8(), out _);
             }
         }
 
-        private static async void FireAndForget(Func<RedisKey, RedisValue, Task> action, RedisKey key, RedisValue value)
+        private static async void FireAndForget(Func<RedisValue, RedisValue, Task> action, RedisValue metadata, RedisValue value)
         {
             try
             {
-                await action(key, value);
+                await action(metadata, value);
             }
             catch { }
         }

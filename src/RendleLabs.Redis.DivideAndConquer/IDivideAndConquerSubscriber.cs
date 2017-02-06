@@ -6,9 +6,9 @@ namespace RendleLabs.Redis.DivideAndConquer
 {
     public interface IDivideAndConquerSubscriber
     {
-        void Subscribe(RedisKey key, Func<RedisKey, RedisValue, Task> action);
+        void Subscribe(Func<RedisValue, RedisValue, Task> action);
 
-        void Unsubscribe(RedisKey key, Func<RedisKey, RedisValue, Task> action = null);
+        void Unsubscribe(Func<RedisValue, RedisValue, Task> action = null);
 
     }
 }

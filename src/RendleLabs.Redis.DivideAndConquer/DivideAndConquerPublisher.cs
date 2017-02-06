@@ -1,5 +1,7 @@
+using System;
 using System.Threading.Tasks;
 using StackExchange.Redis;
+using Google.Protobuf;
 
 namespace RendleLabs.Redis.DivideAndConquer
 {
@@ -17,19 +19,23 @@ namespace RendleLabs.Redis.DivideAndConquer
             _pubSubChannel = pubSubChannel;
         }
 
-        public async Task<long> PublishAsync(RedisKey key, RedisValue value)
+        public Task<long> PublishAsync(RedisValue metadata, RedisValue value)
         {
-            if (_subscriber == null) Open();
-            var count = await _db.ListRightPushAsync(key, value);
-            await _subscriber.PublishAsync(_pubSubChannel, key.ToString());
-            return count;
+            return PublishAsync(metadata, new[] {value});
         }
 
-        public async Task<long> PublishAsync(RedisKey key, RedisValue[] values)
+        public async Task<long> PublishAsync(RedisValue metadata, RedisValue[] values)
         {
             if (_subscriber == null) Open();
-            var count = await _db.ListRightPushAsync(key, values);
-            await _subscriber.PublishAsync(_pubSubChannel, key.ToString());
+            var listKey = $"{_pubSubChannel}.{Guid.NewGuid():N}";
+            var x = Google.Protobuf.ByteString.CopyFromUtf8(listKey);
+            var msg = new PubSubMessage
+            {
+                ListKey = ByteString.CopyFromUtf8(listKey),
+                Metadata = ByteString.CopyFrom(metadata)
+            };
+            var count = await _db.ListRightPushAsync(listKey, values);
+            await _subscriber.PublishAsync(_pubSubChannel, msg.ToByteArray());
             return count;
         }
         

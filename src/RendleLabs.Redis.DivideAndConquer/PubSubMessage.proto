@@ -1,0 +1,9 @@
+syntax = "proto3";
+package redis_divideandconquer;
+option csharp_namespace = "RendleLabs.Redis.DivideAndConquer";
+
+message PubSubMessage
+{
+    bytes listKey = 1;
+    bytes metadata = 2;
+}
