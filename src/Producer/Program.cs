@@ -13,7 +13,7 @@ namespace Producer
             var redis = ConnectionMultiplexer.Connect("127.0.0.1:6379");
             var pub = redis.GetDivideAndConquerPublisher("test");
 
-            var guids = Enumerable.Repeat(0, 1000).Select(_ => (RedisValue)Guid.NewGuid().ToString()).ToArray();
+            var guids = Enumerable.Repeat(0, 20).Select(_ => (RedisValue)Guid.NewGuid().ToString()).ToArray();
             var metadata = JsonConvert.SerializeObject(new Metadata { JobId = "42" });
             pub.PublishAsync(metadata, guids).Wait();
         }

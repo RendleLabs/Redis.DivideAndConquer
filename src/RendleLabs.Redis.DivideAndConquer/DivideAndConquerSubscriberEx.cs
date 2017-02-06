@@ -8,5 +8,9 @@ namespace RendleLabs.Redis.DivideAndConquer
         {
             return new DivideAndConquerSubscriber(redis, channel);
         }
+        public static IDivideAndConquerSubscriber GetDivideAndConquerSubscriber(this ConnectionMultiplexer redis, RedisChannel channel, RedisValue groupName)
+        {
+            return new DivideAndConquerSubscriber(redis, channel, groupName);
+        }
     }
 }

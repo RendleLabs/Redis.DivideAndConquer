@@ -10,6 +10,7 @@ namespace RendleLabs.Redis.DivideAndConquer
         private readonly ConnectionMultiplexer _redis;
         private readonly RedisChannel _pubSubChannel;
         private readonly object _sync = new object();
+        private readonly RedisKey _pubSubGroupsHash;
         private IDatabase _db;
         private ISubscriber _subscriber;
 
@@ -17,6 +18,7 @@ namespace RendleLabs.Redis.DivideAndConquer
         {
             _redis = redis;
             _pubSubChannel = pubSubChannel;
+            _pubSubGroupsHash = $"RLRDAC:{_pubSubChannel}:GROUPS";
         }
 
         public Task<long> PublishAsync(RedisValue metadata, RedisValue value)
@@ -27,14 +29,28 @@ namespace RendleLabs.Redis.DivideAndConquer
         public async Task<long> PublishAsync(RedisValue metadata, RedisValue[] values)
         {
             if (_subscriber == null) Open();
-            var listKey = $"{_pubSubChannel}.{Guid.NewGuid():N}";
-            var x = Google.Protobuf.ByteString.CopyFromUtf8(listKey);
+
+            var listKeyBase = $"{_pubSubChannel}.{Guid.NewGuid():N}";
+            var x = Google.Protobuf.ByteString.CopyFromUtf8(listKeyBase);
             var msg = new PubSubMessage
             {
-                ListKey = ByteString.CopyFromUtf8(listKey),
+                ListKey = ByteString.CopyFromUtf8(listKeyBase),
                 Metadata = ByteString.CopyFrom(metadata)
             };
-            var count = await _db.ListRightPushAsync(listKey, values);
+
+            long count = 0;
+
+            foreach (var pair in _db.HashScan(_pubSubGroupsHash))
+            {
+                int subscribers;
+                if (pair.Value.TryParse(out subscribers) && subscribers > 0)
+                {
+                    var listKey = $"{listKeyBase}:{pair.Name}";
+                    Console.WriteLine(listKey);
+                    count = await _db.ListRightPushAsync(listKey, values);
+                }
+            }
+
             await _subscriber.PublishAsync(_pubSubChannel, msg.ToByteArray());
             return count;
         }

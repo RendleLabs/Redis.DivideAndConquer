@@ -13,13 +13,23 @@ namespace RendleLabs.Redis.DivideAndConquer
         private readonly object _subscriptionsSync = new object();
         private readonly ConnectionMultiplexer _redis;
         private readonly RedisChannel _pubSubChannel;
+        private readonly RedisKey _pubSubGroupsHash;
+        private readonly RedisValue _groupName;
+        private readonly RedisKey _groupSuffix;
         private readonly object _sync = new object();
         private IDatabase _db;
         private ISubscriber _subscriber;
+
         public DivideAndConquerSubscriber(ConnectionMultiplexer redis, RedisChannel pubSubChannel)
+            :this(redis, pubSubChannel, "RLRDAC_PUBSUB_NOGROUP") {}
+
+        public DivideAndConquerSubscriber(ConnectionMultiplexer redis, RedisChannel pubSubChannel, RedisValue groupName)
         {
             _redis = redis;
             _pubSubChannel = pubSubChannel;
+            _pubSubGroupsHash = $"RLRDAC:{_pubSubChannel}:GROUPS";
+            _groupName = groupName;
+            _groupSuffix = $":{groupName}";
         }
 
         public void Subscribe(Func<RedisValue, RedisValue, Task> action)
@@ -61,6 +71,7 @@ namespace RendleLabs.Redis.DivideAndConquer
                 {
                     _subscriber = _redis.GetSubscriber();
                     _db = _redis.GetDatabase();
+                    _db.HashIncrement(_pubSubGroupsHash, _groupName);
                     _subscriber.Subscribe(_pubSubChannel, PubSubMessageHandler);
                 }
             }
@@ -72,7 +83,8 @@ namespace RendleLabs.Redis.DivideAndConquer
             {
                 if (_subscriptions.Count == 0 && _subscriber != null)
                 {
-                    _subscriber.UnsubscribeAll();
+                    _db.HashDecrement(_pubSubGroupsHash, _groupName);
+                    _subscriber.Unsubscribe(_pubSubChannel, PubSubMessageHandler);
                     _subscriber = null;
                     _db = null;
                 }
@@ -95,7 +107,7 @@ namespace RendleLabs.Redis.DivideAndConquer
 
         private async void ProcessQueue(PubSubMessage message)
         {
-            var listKey = message.ListKey.ToByteArray();
+            var listKey = ((RedisKey)message.ListKey.ToByteArray()).Append(_groupSuffix);
             var metadata = message.Metadata.ToByteArray();
             var actions = _subscriptions.ToArray();
             try
