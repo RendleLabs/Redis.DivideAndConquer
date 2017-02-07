@@ -6,7 +6,7 @@ using StackExchange.Redis;
 
 namespace RendleLabs.Redis.DivideAndConquer
 {
-    public class DivideAndConquerSubscriber : IDivideAndConquerSubscriber
+    public class DivideAndConquerSubscriber : IDivideAndConquerSubscriber, IDisposable
     {
         private readonly List<Func<RedisValue, RedisValue, Task>> _subscriptions = new List<Func<RedisValue, RedisValue, Task>>();
         private readonly ConcurrentDictionary<RedisKey, bool> _running = new ConcurrentDictionary<RedisKey, bool>();
@@ -21,7 +21,7 @@ namespace RendleLabs.Redis.DivideAndConquer
         private ISubscriber _subscriber;
 
         public DivideAndConquerSubscriber(ConnectionMultiplexer redis, RedisChannel pubSubChannel)
-            :this(redis, pubSubChannel, "RLRDAC_PUBSUB_NOGROUP") {}
+            : this(redis, pubSubChannel, "RLRDAC_PUBSUB_NOGROUP") { }
 
         public DivideAndConquerSubscriber(ConnectionMultiplexer redis, RedisChannel pubSubChannel, RedisValue groupName)
         {
@@ -79,14 +79,17 @@ namespace RendleLabs.Redis.DivideAndConquer
 
         private void Close()
         {
-            lock (_sync)
+            if (_subscriber != null)
             {
-                if (_subscriptions.Count == 0 && _subscriber != null)
+                lock (_sync)
                 {
-                    _db.HashDecrement(_pubSubGroupsHash, _groupName);
-                    _subscriber.Unsubscribe(_pubSubChannel, PubSubMessageHandler);
-                    _subscriber = null;
-                    _db = null;
+                    if (_subscriber != null)
+                    {
+                        _db.HashDecrement(_pubSubGroupsHash, _groupName);
+                        _subscriber.Unsubscribe(_pubSubChannel, PubSubMessageHandler);
+                        _subscriber = null;
+                        _db = null;
+                    }
                 }
             }
         }
@@ -102,7 +105,7 @@ namespace RendleLabs.Redis.DivideAndConquer
             {
                 ProcessQueue(msg);
             }
-            catch {} // Not awaiting this task
+            catch { } // Not awaiting this task
         }
 
         private async void ProcessQueue(PubSubMessage message)
@@ -119,6 +122,7 @@ namespace RendleLabs.Redis.DivideAndConquer
                     {
                         FireAndForget(actions[i], metadata, value);
                     }
+                    await Task.Delay(1);
                 }
             }
             finally
@@ -136,5 +140,37 @@ namespace RendleLabs.Redis.DivideAndConquer
             }
             catch { }
         }
+
+        #region IDisposable Support
+        private bool disposedValue = false; // To detect redundant calls
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!disposedValue)
+            {
+                if (disposing)
+                {
+                    // TODO: dispose managed state (managed objects).
+                }
+
+                Close();
+
+                disposedValue = true;
+            }
+        }
+
+        ~DivideAndConquerSubscriber()
+        {
+            // Do not change this code. Put cleanup code in Dispose(bool disposing) above.
+            Dispose(false);
+        }
+
+        public void Dispose()
+        {
+            // Do not change this code. Put cleanup code in Dispose(bool disposing) above.
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+        #endregion
     }
 }

@@ -4,7 +4,7 @@ using StackExchange.Redis;
 
 namespace RendleLabs.Redis.DivideAndConquer
 {
-    public interface IDivideAndConquerSubscriber
+    public interface IDivideAndConquerSubscriber : IDisposable
     {
         void Subscribe(Func<RedisValue, RedisValue, Task> action);
 

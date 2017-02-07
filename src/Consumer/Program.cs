@@ -17,12 +17,14 @@ namespace Consumer
             {
                 Console.WriteLine($"Group: {_group}");
             }
-            var subscriber = Consume();
-            Console.WriteLine("Press any key to exit.");
-            Console.ReadKey();
+            using (var subscriber = Consume())
+            {
+                Console.WriteLine("Press any key to exit.");
+                Console.ReadKey();
+            }
         }
 
-        private static IDivideAndConquerSubscriber Consume()
+        private static IDisposable Consume()
         {
             var completedTask = Task.FromResult<object>(null);
             var redis = ConnectionMultiplexer.Connect("127.0.0.1:6379");

@@ -46,7 +46,6 @@ namespace RendleLabs.Redis.DivideAndConquer
                 if (pair.Value.TryParse(out subscribers) && subscribers > 0)
                 {
                     var listKey = $"{listKeyBase}:{pair.Name}";
-                    Console.WriteLine(listKey);
                     count = await _db.ListRightPushAsync(listKey, values);
                 }
             }
